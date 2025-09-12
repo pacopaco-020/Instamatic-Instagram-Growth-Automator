@@ -1,12 +1,13 @@
 #!/bin/bash
-#993AY18H94
+# Instamatic Auto-Run Script Template
+# Copy this file and customize it for your setup
 
 # Directory and file for storing run counts, last run day, and error count
-RUN_COUNT_DIR="/Users/milan/Documents/bots/gramaddict/bot/run_counts_1"
+RUN_COUNT_DIR="/path/to/your/instamatic/run_counts"
 LAST_RUN_DAY_FILE="$RUN_COUNT_DIR/last_run_day"
 ERROR_COUNT_FILE="$RUN_COUNT_DIR/error_count"
 CURRENT_USER_INDEX_FILE="$RUN_COUNT_DIR/current_user_index"
-DEVICE_ID="993AY18H94"
+DEVICE_ID="YOUR_DEVICE_ID"
 
 # Suppress deprecation warnings from adbutils
 export PYTHONWARNINGS="ignore::DeprecationWarning:adbutils._device:forward_list,ignore::DeprecationWarning:adbutils.*,ignore::DeprecationWarning:uiautomator2.*"
@@ -18,15 +19,15 @@ mkdir -p "$RUN_COUNT_DIR"
 [ ! -f "$ERROR_COUNT_FILE" ] && echo "0" > "$ERROR_COUNT_FILE"
 
 # --- Configuration ---
-# User accounts to cycle through
-user_order=( "spectrum_amsterdam" "qlub_" "stretchandfoldstudio") #"stretchandfoldstudio"
+# User accounts to cycle through (add your account names here)
+user_order=( "your_account_1" "your_account_2" "your_account_3" )
 MAX_RUNS_PER_DAY=3
 
-# Activate virtual environment with Python 3.9
+# Script directory and Python command
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# Use Python 3.9 directly for compatibility with GramAddict 3.2.12
-PYTHON_CMD="/usr/local/bin/python3.9"
-source "$SCRIPT_DIR/.venv39/bin/activate"
+PYTHON_CMD="python3"
+# Activate virtual environment
+source "$SCRIPT_DIR/venv39/bin/activate"
 
 # --- Helper Functions ---
 
@@ -39,7 +40,7 @@ reset_counts() {
     echo "0" > "$CURRENT_USER_INDEX_FILE"
 }
 
-# Handle errors and implement a cooling period with aggressive recovery
+# Handle errors and implement a cooling period
 increment_error_count() {
     local error_count=0
     [ -f "$ERROR_COUNT_FILE" ] && error_count=$(cat "$ERROR_COUNT_FILE")
@@ -49,19 +50,11 @@ increment_error_count() {
     echo "Current consecutive error count: $error_count"
     
     if [ "$error_count" -ge 10 ]; then
-        echo "CRITICAL: Too many consecutive errors ($error_count). Performing emergency device restart."
-        if restart_device; then
-            echo "✓ Emergency device restart completed"
-            sleep 120  # Wait 2 minutes after restart
-            echo "0" > "$ERROR_COUNT_FILE"  # Reset error count after restart
-        else
-            echo "✗ Emergency device restart failed"
-            echo "Taking a break for 45 minutes."
-            sleep 2700
-            echo "0" > "$ERROR_COUNT_FILE"  # Reset error count after pause
-        fi
+        echo "Too many consecutive errors ($error_count). Taking a break for 45 minutes."
+        sleep 2700
+        echo "0" > "$ERROR_COUNT_FILE"  # Reset error count after pause
     elif [ "$error_count" -ge 5 ]; then
-        echo "Too many consecutive errors. Taking a break for 45 minutes."
+        echo "Too many consecutive errors. Taking a break for 5 minutes."
         sleep 300
         echo "0" > "$ERROR_COUNT_FILE"  # Reset error count after pause
     fi
@@ -115,49 +108,14 @@ update_run_count() {
 
 # Function to generate a random pause duration between 15 and 25 minutes
 generate_random_pause_duration() {
-    echo $(( (RANDOM % 10 + 15) * 60 ))  # Generates a random value between 15 and 25 minutes in seconds
-}
-
-# Function to restart the device
-restart_device() {
-    echo "Restarting device $DEVICE_ID..."
-    adb -s "$DEVICE_ID" reboot
-    echo "Device restart initiated. Waiting for device to come back online..."
-    
-    # Wait for device to go offline
-    local wait_time=0
-    local max_wait_offline=120  # Wait up to 2 minutes for device to go offline
-    while adb devices | grep -q "$DEVICE_ID" && [ $wait_time -lt $max_wait_offline ]; do
-        sleep 5
-        wait_time=$((wait_time + 5))
-        echo "Waiting for device to go offline... (${wait_time}s)"
-    done
-    
-    # Wait for device to come back online
-    wait_time=0
-    local max_wait_online=300  # Wait up to 5 minutes for device to come back online
-    echo "Waiting for device to come back online..."
-    while ! adb devices | grep -q "$DEVICE_ID\s*device" && [ $wait_time -lt $max_wait_online ]; do
-        sleep 10
-        wait_time=$((wait_time + 10))
-        echo "Waiting for device to come back online... (${wait_time}s)"
-    done
-    
-    if adb devices | grep -q "$DEVICE_ID\s*device"; then
-        echo "✓ Device $DEVICE_ID is back online"
-        sleep 30  # Give device extra time to fully boot
-        return 0
-    else
-        echo "✗ Device $DEVICE_ID failed to come back online within ${max_wait_online} seconds"
-        return 1
-    fi
+    echo $(( (RANDOM % 11 + 15) * 60 ))  # Generates a random value between 15 and 25 minutes in seconds
 }
 
 # Robust UIAutomator2 restart to resolve connection issues
 restart_uiautomator() {
     echo "Performing robust restart of UIAutomator2 for $DEVICE_ID..."
 
-    # Step 1: Kill all UIAutomator and atx-agent processes more aggressively
+    # Step 1: Kill all UIAutomator and atx-agent processes
     echo "Killing all UIAutomator and atx-agent processes..."
     adb -s "$DEVICE_ID" shell "pkill -f uiautomator" >/dev/null 2>&1 || true
     adb -s "$DEVICE_ID" shell "pkill -f atx-agent" >/dev/null 2>&1 || true
@@ -173,7 +131,7 @@ restart_uiautomator() {
     adb -s "$DEVICE_ID" shell "pm clear com.github.uiautomator.test" >/dev/null 2>&1 || true
     sleep 2 # Give it time to clear data
 
-    # Step 3: Clear any stuck port forwards (less disruptive than full disconnect)
+    # Step 3: Clear any stuck port forwards
     echo "Clearing potential stuck port forwards..."
     adb -s "$DEVICE_ID" forward --remove-all >/dev/null 2>&1 || true
     sleep 1
@@ -311,157 +269,9 @@ close_atx_agent() {
     sleep 3
 }
 
-# Function to start UIAutomator via ATX Agent app
-start_uiautomator_via_atx_agent() {
-    echo "Starting UIAutomator via ATX Agent app..."
-    
-    # Open ATX Agent app
-    echo "Opening ATX Agent app..."
-    adb -s "$DEVICE_ID" shell am start -n com.github.uiautomator/.MainActivity
-    sleep 8  # Give more time for app to load
-    
-    # Wait for app to load and look for the "启动UIAUTOMATOR" button
-    echo "Looking for UIAutomator start button..."
-    local max_attempts=15
-    local attempt=0
-    
-    while [ $attempt -lt $max_attempts ]; do
-        # Dump the UI and look for the button
-        adb -s "$DEVICE_ID" shell "uiautomator dump" >/dev/null 2>&1
-        sleep 2
-        
-        # Try multiple methods to find and click the button
-        if adb -s "$DEVICE_ID" shell "grep -q '启动UIAUTOMATOR' /sdcard/window_dump.xml" 2>/dev/null; then
-            echo "Found UIAutomator start button, attempting to click it..."
-            
-            # Method 1: Try clicking by text (if supported)
-            adb -s "$DEVICE_ID" shell "input text '启动UIAUTOMATOR' && input keyevent 66" >/dev/null 2>&1
-            sleep 2
-            
-            # Method 2: Try clicking at common button locations
-            # Try different Y coordinates where the button might be
-            for y_coord in 600 700 800 900 1000; do
-                echo "Trying to click at coordinates (540, $y_coord)..."
-                adb -s "$DEVICE_ID" shell "input tap 540 $y_coord"
-                sleep 3
-                
-                # Check if UIAutomator started
-                adb -s "$DEVICE_ID" shell "uiautomator dump" >/dev/null 2>&1
-                if adb -s "$DEVICE_ID" shell "grep -q 'UIAutomator Running' /sdcard/window_dump.xml" 2>/dev/null; then
-                    echo "✓ UIAutomator started successfully via ATX Agent"
-                    return 0
-                fi
-            done
-            
-            # Method 3: Try swiping to find the button if it's not visible
-            echo "Button not found at common locations, trying swipe..."
-            adb -s "$DEVICE_ID" shell "input swipe 540 1000 540 500"
-            sleep 2
-            
-            # Try clicking again after swipe
-            adb -s "$DEVICE_ID" shell "input tap 540 800"
-            sleep 3
-            
-            # Check again
-            adb -s "$DEVICE_ID" shell "uiautomator dump" >/dev/null 2>&1
-            if adb -s "$DEVICE_ID" shell "grep -q 'UIAutomator Running' /sdcard/window_dump.xml" 2>/dev/null; then
-                echo "✓ UIAutomator started successfully via ATX Agent after swipe"
-                return 0
-            fi
-            
-            echo "UIAutomator start button clicked but service not running yet..."
-            sleep 5
-        else
-            echo "UIAutomator start button not found, attempt $((attempt + 1))/$max_attempts"
-            sleep 3
-        fi
-        ((attempt++))
-    done
-    
-    echo "✗ Failed to start UIAutomator via ATX Agent app after $max_attempts attempts"
-    return 1
-}
-
-# Function to ensure UIAutomator is running with aggressive recovery
-ensure_uiautomator_running() {
-    echo "Ensuring UIAutomator is running with aggressive recovery..."
-    local max_attempts=5
-    local attempt=0
-    
-    while [ $attempt -lt $max_attempts ]; do
-        echo "UIAutomator recovery attempt $((attempt + 1))/$max_attempts"
-        
-        # Step 1: Kill all existing processes
-        echo "Killing all UIAutomator and ATX processes..."
-        adb -s "$DEVICE_ID" shell "pkill -f uiautomator" >/dev/null 2>&1 || true
-        adb -s "$DEVICE_ID" shell "pkill -f atx-agent" >/dev/null 2>&1 || true
-        adb -s "$DEVICE_ID" shell "am force-stop com.github.uiautomator" >/dev/null 2>&1 || true
-        adb -s "$DEVICE_ID" shell "am force-stop com.github.uiautomator.test" >/dev/null 2>&1 || true
-        sleep 5
-        
-        # Step 2: Clear port forwards
-        echo "Clearing port forwards..."
-        adb -s "$DEVICE_ID" forward --remove-all >/dev/null 2>&1 || true
-        sleep 2
-        
-        # Step 3: Try standard uiautomator2 init
-        echo "Attempting standard UIAutomator2 initialization..."
-        if timeout 90 "$PYTHON_CMD" -m uiautomator2 init --serial "$DEVICE_ID" >/dev/null 2>&1; then
-            echo "✓ Standard UIAutomator2 initialization successful"
-            sleep 10  # Give more time for initialization
-            
-            # Test if it's actually working
-            if "$PYTHON_CMD" -c "import uiautomator2; d = uiautomator2.connect('$DEVICE_ID'); print(d.info)" &>/dev/null; then
-                echo "✓ UIAutomator2 connection verified"
-                return 0
-            else
-                echo "Standard initialization completed but connection test failed"
-            fi
-        else
-            echo "Standard UIAutomator2 initialization failed"
-        fi
-        
-        # Step 4: If standard method failed, try ATX Agent app method
-        echo "Trying ATX Agent app method..."
-        if start_uiautomator_via_atx_agent; then
-            sleep 10  # Give more time for ATX Agent method
-            
-            # Test connection again
-            if "$PYTHON_CMD" -c "import uiautomator2; d = uiautomator2.connect('$DEVICE_ID'); print(d.info)" &>/dev/null; then
-                echo "✓ UIAutomator2 connection verified after ATX Agent method"
-                return 0
-            else
-                echo "ATX Agent method completed but connection test failed"
-            fi
-        fi
-        
-        # Step 5: If both methods failed, try a full device restart
-        if [ $attempt -eq $((max_attempts - 1)) ]; then
-            echo "All methods failed. Attempting device restart as last resort..."
-            if restart_device; then
-                sleep 60  # Wait for device to fully boot
-                # Try one more time after restart
-                if timeout 90 "$PYTHON_CMD" -m uiautomator2 init --serial "$DEVICE_ID" >/dev/null 2>&1; then
-                    if "$PYTHON_CMD" -c "import uiautomator2; d = uiautomator2.connect('$DEVICE_ID'); print(d.info)" &>/dev/null; then
-                        echo "✓ UIAutomator2 working after device restart"
-                        return 0
-                    fi
-                fi
-            fi
-        fi
-        
-        echo "Attempt $((attempt + 1)) failed. Waiting 30 seconds before next attempt..."
-        sleep 30
-        ((attempt++))
-    done
-    
-    echo "✗ All UIAutomator recovery attempts failed"
-    return 1
-}
-
 # --- Main Logic ---
 
-echo "Starting Instagram Botting Script..."
+echo "Starting Instamatic Auto-Run Script..."
 
 while true; do
     check_new_day
@@ -472,7 +282,9 @@ while true; do
     [ ! -f "$CURRENT_USER_INDEX_FILE" ] && echo "0" > "$CURRENT_USER_INDEX_FILE"
     [ ! -f "$ERROR_COUNT_FILE" ] && echo "0" > "$ERROR_COUNT_FILE"
 
-    if [ "$current_hour" -ge 7 ] && [ "$current_hour" -lt 22 ]; then
+    if [ "$current_hour" -ge 7 ] && [ "$current_hour" -lt 22 ]; then # Active hours (7 AM to 9:59 PM)
+        echo "Within active hours ($current_hour:00). Starting session loop."
+
         for ((i = 0; i < ${#user_order[@]}; i++)); do
             user_index=$(get_next_user_index)
             username=${user_order[$user_index]}
@@ -485,20 +297,20 @@ while true; do
                 continue
             fi
             
-            # Ensure UIAutomator2 is running with aggressive recovery
-            if ! ensure_uiautomator_running; then
-                echo "Failed to ensure UIAutomator2 is running. Skipping session for $username."
-                # Error count is incremented within ensure_uiautomator_running on failure
+            # Restart UIAutomator2 at the beginning of each session for a clean state.
+            if ! restart_uiautomator; then
+                echo "Failed to robustly restart UIAutomator2. Skipping session for $username."
+                # Error count is incremented within restart_uiautomator on failure
                 continue # Skip this session if UIAutomator2 isn't ready
             fi
 
             if check_error_count && update_run_count "$username"; then
-                echo "Running GramAddict for account: $username"
-                CONFIG_PATH="/Users/milan/Documents/bots/gramaddict/bot/accounts/$username/config.yml"
+                echo "Running Instamatic for account: $username"
+                CONFIG_PATH="$SCRIPT_DIR/accounts/$username/config.yml"
                 
-                # Run GramAddict with timeout
-                echo "Starting GramAddict with 2-hour timeout..."
-                timeout 7200 python "$SCRIPT_DIR/run.py" run --config "$CONFIG_PATH" --device "$DEVICE_ID"
+                # Run Instamatic with timeout
+                echo "Starting Instamatic with 2-hour timeout..."
+                timeout 7200 "$PYTHON_CMD" "$SCRIPT_DIR/run.py" run --config "$CONFIG_PATH" --device "$DEVICE_ID"
                 EXIT_STATUS=$?
                 
                 if [ $EXIT_STATUS -eq 124 ]; then
@@ -507,7 +319,7 @@ while true; do
                     # Close ATX Agent app after successful timeout
                     close_atx_agent
                 elif [ $EXIT_STATUS -ne 0 ]; then
-                    echo "Session for $username failed with exit status $EXIT_STATUS. This indicates a crash or unhandled error within GramAddict."
+                    echo "Session for $username failed with exit status $EXIT_STATUS. This indicates a crash or unhandled error within Instamatic."
                     increment_error_count
                 else
                     echo "Session for $username completed successfully."
@@ -525,8 +337,8 @@ while true; do
             echo "Pausing for $((pause_duration / 60)) minutes before next account or loop."
             sleep "$pause_duration"
         done
-    else
-        echo "Outside active hours. Sleeping for 15 minutes."
-        sleep 900
+    else # Outside active hours (10 PM to 6:59 AM)
+        echo "Outside active hours ($current_hour:00). Sleeping for 15 minutes."
+        sleep 900 
     fi
 done

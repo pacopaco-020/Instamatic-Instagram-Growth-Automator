@@ -44,7 +44,7 @@ python run.py init account3
 # 2. Configure each account (edit config.yml files)
 
 # 3. Run ALL accounts automatically
-./scripts/auto_run_managed.sh
+./auto_run.sh
 ```
 
 **That's it!** Instamatic will automatically cycle through all your accounts, running each one with its own settings and limits. No manual intervention needed!
@@ -258,19 +258,54 @@ like-limit: 50-80
 
 #### 3. Use Auto-Run Scripts
 
-**Option A: Managed Auto-Run (Recommended)**
+**Option A: Auto-Run Template (Recommended)**
 ```bash
-# Runs all accounts with smart management
-./scripts/auto_run_managed.sh
+# Copy and customize the template
+cp auto_run.sh my_auto_run.sh
+# Edit my_auto_run.sh with your accounts and device ID
+./my_auto_run.sh
 ```
 
-**Option B: Individual Auto-Run Scripts**
+**Option B: Use the Template Directly**
 ```bash
-# Run specific accounts
-./scripts/auto_run_2.sh  # Account 1
-./scripts/auto_run_3.sh  # Account 2  
-./scripts/auto_run_4.sh  # Account 3
-./scripts/auto_run_5.sh  # Account 4
+# Edit auto_run.sh with your settings and run
+./auto_run.sh
+```
+
+### Customizing the Auto-Run Template
+
+The `auto_run.sh` file is a clean template that new users can customize:
+
+#### 📝 **Required Customizations:**
+
+1. **Set your device ID:**
+   ```bash
+   DEVICE_ID="YOUR_DEVICE_ID"  # Get this from 'adb devices'
+   ```
+
+2. **Add your account names:**
+   ```bash
+   user_order=( "your_account_1" "your_account_2" "your_account_3" )
+   ```
+
+3. **Set your run counts directory:**
+   ```bash
+   RUN_COUNT_DIR="/path/to/your/instamatic/run_counts"
+   ```
+
+#### 🚀 **Quick Setup:**
+```bash
+# Copy the template
+cp auto_run.sh my_auto_run.sh
+
+# Edit with your settings
+nano my_auto_run.sh
+
+# Make it executable
+chmod +x my_auto_run.sh
+
+# Run your customized script
+./my_auto_run.sh
 ```
 
 ### Auto-Run Script Features
@@ -490,13 +525,12 @@ python run.py init niche_account
 python run.py run --config accounts/business_account/config.yml
 
 # Run ALL accounts automatically (RECOMMENDED)
-./scripts/auto_run_managed.sh
+./auto_run.sh
 
-# Or use individual auto-run scripts
-./scripts/auto_run_2.sh  # Runs account 1
-./scripts/auto_run_3.sh  # Runs account 2
-./scripts/auto_run_4.sh  # Runs account 3
-./scripts/auto_run_5.sh  # Runs account 4
+# Or copy and customize the template
+cp auto_run.sh my_auto_run.sh
+# Edit my_auto_run.sh with your specific settings
+./my_auto_run.sh
 ```
 
 **Key Benefits:**

@@ -1,8 +1,12 @@
 # Account configurations and sensitive data
 accounts/
 
-# Auto run scripts
-scripts/auto_run*.sh
+# Auto run scripts (except auto_run.sh which is the template)
+auto_run_2.sh
+auto_run_3.sh
+auto_run_4.sh
+auto_run_5.sh
+auto_run_managed.sh
 
 # Virtual environments
 .venv39/
