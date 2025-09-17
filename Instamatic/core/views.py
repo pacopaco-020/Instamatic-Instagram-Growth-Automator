@@ -1195,49 +1195,6 @@ class AccountView:
             logger.warning("Continuing without navigation - account might already be correct")
             # Don't crash - just continue
             pass
-    def changeToUsername(self, username: str):
-        action_bar = ProfileView._getActionBarTitleBtn(self)
-        if action_bar is not None:
-            current_profile_name = action_bar.get_text()
-            # in private accounts there is little lock which is codec as two spaces (should be \u1F512)
-            if current_profile_name.strip().upper() == username.upper():
-                logger.info(
-                    f"You are already logged as {username}!",
-                    extra={"color": f"{Style.BRIGHT}{Fore.BLUE}"},
-                )
-                return True
-            logger.debug(f"You're logged as {current_profile_name.strip()}")
-            selector = self.device.find(resourceId=ResourceID.ACTION_BAR_TITLE_CHEVRON)
-            selector.click()
-            if self._find_username(username):
-                if action_bar is not None:
-                    current_profile_name = action_bar.get_text()
-                    if current_profile_name.strip().upper() == username.upper():
-                        return True
-                else:
-                    logger.error(
-                        "Cannot find action bar (where you select your account)!"
-                    )
-        return False
-
-    def _find_username(self, username, has_scrolled=False):
-        list_view = self.device.find(resourceId=ResourceID.LIST)
-        username_obj = self.device.find(
-            resourceIdMatches=f"{ResourceID.ROW_USER_TEXTVIEW}|{ResourceID.USERNAME_TEXTVIEW}",
-            textMatches=case_insensitive_re(username),
-        )
-        if username_obj.exists(Timeout.SHORT):
-            logger.info(
-                f"Switching to {username}...",
-                extra={"color": f"{Style.BRIGHT}{Fore.BLUE}"},
-            )
-            username_obj.click()
-            return True
-        elif list_view.is_scrollable() and not has_scrolled:
-            logger.debug("User list is scrollable.")
-            list_view.scroll(Direction.DOWN)
-            self._find_username(username, has_scrolled=True)
-        return False
 
     def refresh_account(self):
         import time
@@ -1288,6 +1245,226 @@ class AccountView:
                 else:
                     logger.error("Failed to refresh account after all retries - app keeps crashing")
                     raise  # Re-raise the exception if all retries failed
+
+    def changeToUsername(self, username: str):
+        action_bar = ProfileView._getActionBarTitleBtn(self)
+        if action_bar is not None:
+            current_profile_name = action_bar.get_text()
+            # in private accounts there is little lock which is codec as two spaces (should be \u1F512)
+            if current_profile_name.strip().upper() == username.upper():
+                logger.info(
+                    f"You are already logged as {username}!",
+                    extra={"color": f"{Style.BRIGHT}{Fore.BLUE}"},
+                )
+                return True
+            logger.debug(f"You're logged as {current_profile_name.strip()}")
+            
+            # Try multiple approaches for account switching
+            
+            # Method 1: Try clicking on the username area directly (most reliable for v330)
+            logger.debug("Trying direct username click approach")
+            username_clickable = self.device.find(
+                resourceId="com.instagram.android:id/action_bar_large_title_auto_size"
+            )
+            if username_clickable.exists():
+                logger.debug("Clicking on username area to open account switcher")
+                username_clickable.click()
+                random_sleep(1, 2)
+                if self._find_username(username):
+                    return True
+            
+            # Method 2: Try v300 approach (header chevron)
+            selector = self.device.find(resourceId=ResourceID.ACTION_BAR_TITLE_CHEVRON)
+            if selector.exists():
+                logger.debug("Using v300 account switching (header chevron)")
+                selector.click()
+                if self._find_username(username):
+                    if action_bar is not None:
+                        current_profile_name = action_bar.get_text()
+                        if current_profile_name.strip().upper() == username.upper():
+                            return True
+                    else:
+                        logger.error(
+                            "Cannot find action bar (where you select your account)!"
+                        )
+            
+            # Method 3: Try coordinate-based clicking for chevron (for NAF elements)
+            logger.debug("Trying coordinate-based chevron click")
+            try:
+                # Click on the chevron area coordinates (from UI hierarchy analysis)
+                self.device.click(705, 153)  # Center of chevron bounds [689,137][722,170]
+                random_sleep(1, 2)
+                if self._find_username(username):
+                    return True
+            except Exception as e:
+                logger.debug(f"Coordinate-based chevron click failed: {e}")
+            
+            # Method 4: Try v330 bottom area approach as fallback
+            logger.debug("Trying v330 bottom area approach")
+            if self._try_v330_account_switching(username):
+                return True
+        return False
+
+    def _find_username(self, username, has_scrolled=False):
+        # Try multiple approaches to find the username in account switching UI
+        logger.debug(f"Looking for username '{username}' in account switching UI...")
+        
+        # Method 1: Try v330 RecyclerView approach (content-desc based)
+        logger.debug("Trying v330 RecyclerView approach...")
+        recycler_view = self.device.find(className="androidx.recyclerview.widget.RecyclerView")
+        if recycler_view.exists():
+            # Look for ViewGroup elements with content-desc containing the username
+            username_obj = self.device.find(
+                className="android.view.ViewGroup",
+                textMatches=case_insensitive_re(username)
+            )
+            if username_obj.exists(Timeout.SHORT):
+                logger.info(
+                    f"Switching to {username}... (found via v330 content-desc)",
+                    extra={"color": f"{Style.BRIGHT}{Fore.BLUE}"},
+                )
+                username_obj.click()
+                return True
+        
+        # Method 2: Try original resource IDs (for backward compatibility)
+        list_view = self.device.find(resourceId=ResourceID.LIST)
+        username_obj = self.device.find(
+            resourceIdMatches=f"{ResourceID.ROW_USER_TEXTVIEW}|{ResourceID.USERNAME_TEXTVIEW}",
+            textMatches=case_insensitive_re(username),
+        )
+        if username_obj.exists(Timeout.SHORT):
+            logger.info(
+                f"Switching to {username}... (found via original resource IDs)",
+                extra={"color": f"{Style.BRIGHT}{Fore.BLUE}"},
+            )
+            username_obj.click()
+            return True
+        
+        # Method 3: Try broader search for any text containing the username
+        logger.debug("Trying broader search for username...")
+        username_obj = self.device.find(
+            textMatches=case_insensitive_re(username),
+        )
+        if username_obj.exists(Timeout.SHORT):
+            logger.info(
+                f"Switching to {username}... (found via text search)",
+                extra={"color": f"{Style.BRIGHT}{Fore.BLUE}"},
+            )
+            username_obj.click()
+            return True
+        
+        # Method 4: Try looking for clickable elements with username
+        logger.debug("Trying clickable elements search...")
+        username_obj = self.device.find(
+            classNameMatches=ClassName.BUTTON_OR_FRAME_LAYOUT_REGEX,
+            textMatches=case_insensitive_re(username),
+        )
+        if username_obj.exists(Timeout.SHORT):
+            logger.info(
+                f"Switching to {username}... (found via clickable element)",
+                extra={"color": f"{Style.BRIGHT}{Fore.BLUE}"},
+            )
+            username_obj.click()
+            return True
+        
+        # Method 5: Try scrolling if list is scrollable
+        if list_view.is_scrollable() and not has_scrolled:
+            logger.debug("User list is scrollable, trying scroll...")
+            list_view.scroll(Direction.DOWN)
+            return self._find_username(username, has_scrolled=True)
+        
+        logger.debug(f"Could not find username '{username}' in account switching UI")
+        return False
+
+    def _try_v330_account_switching(self, username: str):
+        """Try account switching for Instagram v330 where accounts list is at the bottom"""
+        try:
+            logger.debug("Attempting v330 account switching...")
+            
+            # In v330, the account switching might be in a different location
+            # Try to find common UI elements for account switching
+            
+            # Method 1: Look for a bottom sheet or modal with account list
+            bottom_sheet = self.device.find(resourceId=ResourceID.BOTTOM_SHEET_CONTAINER_VIEW)
+            if bottom_sheet.exists():
+                logger.debug("Found bottom sheet, looking for account list")
+                if self._find_username_in_bottom_sheet(username):
+                    return True
+            
+            # Method 2: Look for account switching button in profile area
+            # Try clicking on the username area to open account switcher
+            username_area = self.device.find(
+                classNameMatches=ClassName.BUTTON_OR_FRAME_LAYOUT_REGEX,
+                textMatches=case_insensitive_re(username)
+            )
+            if username_area.exists():
+                logger.debug("Found username area, clicking to open account switcher")
+                username_area.click()
+                random_sleep(1, 2)
+                if self._find_username(username):
+                    return True
+            
+            # Method 3: Try coordinate-based approach for bottom area
+            # Look for account switching elements in the bottom portion of the screen
+            screen_height = self.device.screen_height if hasattr(self.device, 'screen_height') else 2088
+            bottom_area_y = int(screen_height * 0.8)  # Bottom 20% of screen
+            
+            # Look for clickable elements in the bottom area
+            bottom_elements = self.device.find(
+                classNameMatches=ClassName.BUTTON_OR_FRAME_LAYOUT_REGEX
+            )
+            
+            # Try to find elements that might be account switching related
+            for element in bottom_elements:
+                try:
+                    bounds = element.get_bounds()
+                    if bounds and bounds[1] > bottom_area_y:  # Element is in bottom area
+                        element_text = element.get_text()
+                        if element_text and username.lower() in element_text.lower():
+                            logger.debug(f"Found potential account element: {element_text}")
+                            element.click()
+                            random_sleep(1, 2)
+                            if self._find_username(username):
+                                return True
+                except:
+                    continue
+            
+            # Method 4: Try swiping up from bottom to reveal account switcher
+            logger.debug("Trying swipe up from bottom to reveal account switcher")
+            screen_width = self.device.screen_width if hasattr(self.device, 'screen_width') else 1080
+            start_x = screen_width // 2
+            start_y = int(screen_height * 0.9)
+            end_y = int(screen_height * 0.7)
+            
+            self.device.swipe(start_x, start_y, start_x, end_y)
+            random_sleep(1, 2)
+            
+            if self._find_username(username):
+                return True
+                
+        except Exception as e:
+            logger.warning(f"v330 account switching failed: {e}")
+        
+        return False
+
+    def _find_username_in_bottom_sheet(self, username: str):
+        """Find username in bottom sheet UI"""
+        try:
+            # Look for username in bottom sheet
+            username_obj = self.device.find(
+                className="android.view.ViewGroup",
+                textMatches=case_insensitive_re(username)
+            )
+            if username_obj.exists(Timeout.SHORT):
+                logger.info(
+                    f"Switching to {username}... (found in bottom sheet)",
+                    extra={"color": f"{Style.BRIGHT}{Fore.BLUE}"},
+                )
+                username_obj.click()
+                return True
+        except Exception as e:
+            logger.debug(f"Bottom sheet username search failed: {e}")
+        return False
 
 
 class SettingsView:
@@ -2195,6 +2372,226 @@ class ProfileView(ActionBarView):
         views = f"({ClassName.RECYCLER_VIEW}|{ClassName.VIEW})"
 
         return self.device.find(classNameMatches=views)
+
+    def changeToUsername(self, username: str):
+        action_bar = ProfileView._getActionBarTitleBtn(self)
+        if action_bar is not None:
+            current_profile_name = action_bar.get_text()
+            # in private accounts there is little lock which is codec as two spaces (should be \u1F512)
+            if current_profile_name.strip().upper() == username.upper():
+                logger.info(
+                    f"You are already logged as {username}!",
+                    extra={"color": f"{Style.BRIGHT}{Fore.BLUE}"},
+                )
+                return True
+            logger.debug(f"You're logged as {current_profile_name.strip()}")
+            
+            # Try multiple approaches for account switching
+            
+            # Method 1: Try clicking on the username area directly (most reliable for v330)
+            logger.debug("Trying direct username click approach")
+            username_clickable = self.device.find(
+                resourceId="com.instagram.android:id/action_bar_large_title_auto_size"
+            )
+            if username_clickable.exists():
+                logger.debug("Clicking on username area to open account switcher")
+                username_clickable.click()
+                random_sleep(1, 2)
+                if self._find_username(username):
+                    return True
+            
+            # Method 2: Try v300 approach (header chevron)
+            selector = self.device.find(resourceId=ResourceID.ACTION_BAR_TITLE_CHEVRON)
+            if selector.exists():
+                logger.debug("Using v300 account switching (header chevron)")
+                selector.click()
+                if self._find_username(username):
+                    if action_bar is not None:
+                        current_profile_name = action_bar.get_text()
+                        if current_profile_name.strip().upper() == username.upper():
+                            return True
+                    else:
+                        logger.error(
+                            "Cannot find action bar (where you select your account)!"
+                        )
+            
+            # Method 3: Try coordinate-based clicking for chevron (for NAF elements)
+            logger.debug("Trying coordinate-based chevron click")
+            try:
+                # Click on the chevron area coordinates (from UI hierarchy analysis)
+                self.device.click(705, 153)  # Center of chevron bounds [689,137][722,170]
+                random_sleep(1, 2)
+                if self._find_username(username):
+                    return True
+            except Exception as e:
+                logger.debug(f"Coordinate-based chevron click failed: {e}")
+            
+            # Method 4: Try v330 bottom area approach as fallback
+            logger.debug("Trying v330 bottom area approach")
+            if self._try_v330_account_switching(username):
+                return True
+        return False
+
+    def _find_username(self, username, has_scrolled=False):
+        # Try multiple approaches to find the username in account switching UI
+        logger.debug(f"Looking for username '{username}' in account switching UI...")
+        
+        # Method 1: Try v330 RecyclerView approach (content-desc based)
+        logger.debug("Trying v330 RecyclerView approach...")
+        recycler_view = self.device.find(className="androidx.recyclerview.widget.RecyclerView")
+        if recycler_view.exists():
+            # Look for ViewGroup elements with content-desc containing the username
+            username_obj = self.device.find(
+                className="android.view.ViewGroup",
+                textMatches=case_insensitive_re(username)
+            )
+            if username_obj.exists(Timeout.SHORT):
+                logger.info(
+                    f"Switching to {username}... (found via v330 content-desc)",
+                    extra={"color": f"{Style.BRIGHT}{Fore.BLUE}"},
+                )
+                username_obj.click()
+                return True
+        
+        # Method 2: Try original resource IDs (for backward compatibility)
+        list_view = self.device.find(resourceId=ResourceID.LIST)
+        username_obj = self.device.find(
+            resourceIdMatches=f"{ResourceID.ROW_USER_TEXTVIEW}|{ResourceID.USERNAME_TEXTVIEW}",
+            textMatches=case_insensitive_re(username),
+        )
+        if username_obj.exists(Timeout.SHORT):
+            logger.info(
+                f"Switching to {username}... (found via original resource IDs)",
+                extra={"color": f"{Style.BRIGHT}{Fore.BLUE}"},
+            )
+            username_obj.click()
+            return True
+        
+        # Method 3: Try broader search for any text containing the username
+        logger.debug("Trying broader search for username...")
+        username_obj = self.device.find(
+            textMatches=case_insensitive_re(username),
+        )
+        if username_obj.exists(Timeout.SHORT):
+            logger.info(
+                f"Switching to {username}... (found via text search)",
+                extra={"color": f"{Style.BRIGHT}{Fore.BLUE}"},
+            )
+            username_obj.click()
+            return True
+        
+        # Method 4: Try looking for clickable elements with username
+        logger.debug("Trying clickable elements search...")
+        username_obj = self.device.find(
+            classNameMatches=ClassName.BUTTON_OR_FRAME_LAYOUT_REGEX,
+            textMatches=case_insensitive_re(username),
+        )
+        if username_obj.exists(Timeout.SHORT):
+            logger.info(
+                f"Switching to {username}... (found via clickable element)",
+                extra={"color": f"{Style.BRIGHT}{Fore.BLUE}"},
+            )
+            username_obj.click()
+            return True
+        
+        # Method 5: Try scrolling if list is scrollable
+        if list_view.is_scrollable() and not has_scrolled:
+            logger.debug("User list is scrollable, trying scroll...")
+            list_view.scroll(Direction.DOWN)
+            return self._find_username(username, has_scrolled=True)
+        
+        logger.debug(f"Could not find username '{username}' in account switching UI")
+        return False
+
+    def _try_v330_account_switching(self, username: str):
+        """Try account switching for Instagram v330 where accounts list is at the bottom"""
+        try:
+            logger.debug("Attempting v330 account switching...")
+            
+            # In v330, the account switching might be in a different location
+            # Try to find common UI elements for account switching
+            
+            # Method 1: Look for a bottom sheet or modal with account list
+            bottom_sheet = self.device.find(resourceId=ResourceID.BOTTOM_SHEET_CONTAINER_VIEW)
+            if bottom_sheet.exists():
+                logger.debug("Found bottom sheet, looking for account list")
+                if self._find_username_in_bottom_sheet(username):
+                    return True
+            
+            # Method 2: Look for account switching button in profile area
+            # Try clicking on the username area to open account switcher
+            username_area = self.device.find(
+                classNameMatches=ClassName.BUTTON_OR_FRAME_LAYOUT_REGEX,
+                textMatches=case_insensitive_re(username)
+            )
+            if username_area.exists():
+                logger.debug("Found username area, clicking to open account switcher")
+                username_area.click()
+                random_sleep(1, 2)
+                if self._find_username(username):
+                    return True
+            
+            # Method 3: Try coordinate-based approach for bottom area
+            # Look for account switching elements in the bottom portion of the screen
+            screen_height = self.device.screen_height if hasattr(self.device, 'screen_height') else 2088
+            bottom_area_y = int(screen_height * 0.8)  # Bottom 20% of screen
+            
+            # Look for clickable elements in the bottom area
+            bottom_elements = self.device.find(
+                classNameMatches=ClassName.BUTTON_OR_FRAME_LAYOUT_REGEX
+            )
+            
+            # Try to find elements that might be account switching related
+            for element in bottom_elements:
+                try:
+                    bounds = element.get_bounds()
+                    if bounds and bounds[1] > bottom_area_y:  # Element is in bottom area
+                        element_text = element.get_text()
+                        if element_text and username.lower() in element_text.lower():
+                            logger.debug(f"Found potential account element: {element_text}")
+                            element.click()
+                            random_sleep(1, 2)
+                            if self._find_username(username):
+                                return True
+                except:
+                    continue
+            
+            # Method 4: Try swiping up from bottom to reveal account switcher
+            logger.debug("Trying swipe up from bottom to reveal account switcher")
+            screen_width = self.device.screen_width if hasattr(self.device, 'screen_width') else 1080
+            start_x = screen_width // 2
+            start_y = int(screen_height * 0.9)
+            end_y = int(screen_height * 0.7)
+            
+            self.device.swipe(start_x, start_y, start_x, end_y)
+            random_sleep(1, 2)
+            
+            if self._find_username(username):
+                return True
+                
+        except Exception as e:
+            logger.warning(f"v330 account switching failed: {e}")
+        
+        return False
+
+    def _find_username_in_bottom_sheet(self, username: str):
+        """Find username in bottom sheet UI"""
+        try:
+            # Look for username in bottom sheet
+            username_obj = self.device.find(
+                className="android.view.ViewGroup",
+                textMatches=case_insensitive_re(username)
+            )
+            if username_obj.exists(Timeout.SHORT):
+                logger.info(
+                    f"Switching to {username}... (found in bottom sheet)",
+                    extra={"color": f"{Style.BRIGHT}{Fore.BLUE}"},
+                )
+                username_obj.click()
+                return True
+        except Exception as e:
+            logger.debug(f"Bottom sheet username search failed: {e}")
+        return False
 
 
 class FollowingView:
