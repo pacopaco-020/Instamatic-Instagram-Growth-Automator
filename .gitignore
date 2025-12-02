@@ -2,6 +2,7 @@
 accounts/
 
 # Auto run scripts (except auto_run.sh which is the template)
+auto_run.sh
 auto_run_2.sh
 auto_run_3.sh
 auto_run_4.sh

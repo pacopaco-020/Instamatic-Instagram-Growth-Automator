@@ -25,8 +25,9 @@ MAX_RUNS_PER_DAY=3
 # Activate virtual environment with Python 3.9
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Use Python 3.9 directly for compatibility with Instamatic 3.2.12
-PYTHON_CMD="/usr/local/bin/python3.9"
-source "$SCRIPT_DIR/.venv39/bin/activate"
+BOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+PYTHON_CMD="/opt/homebrew/bin/python3.9"
+source "$BOT_DIR/venv39/bin/activate"
 
 # --- Helper Functions ---
 
