@@ -158,6 +158,10 @@ class ResourceID:
         )
         self.ROW_THREAD_COMPOSER_EDITTEXT = f"{APP_ID}:id/row_thread_composer_edittext"
         self.ROW_USER_CONTAINER_BASE = f"{APP_ID}:id/row_user_container_base"
+        # Additional v330+ likers UI elements
+        self.ROW_USER_CONTAINER = f"{APP_ID}:id/row_user_container"
+        self.USER_ROW_CONTAINER = f"{APP_ID}:id/user_row_container"
+        self.LIKERS_LIST_CONTAINER = f"{APP_ID}:id/likers_list_container"
         self.ROW_USER_PRIMARY_NAME = f"{APP_ID}:id/row_user_primary_name"
         self.ROW_USER_TEXTVIEW = f"{APP_ID}:id/row_user_textview"
         self.SEARCH = f"{APP_ID}:id/search"
@@ -193,13 +197,14 @@ class ResourceID:
         )
         self.CAROUSEL_AND_MEDIA_GROUP = f"{self.CAROUSEL_IMAGE}|{self.MEDIA_GROUP}|{self.CAROUSEL_IMAGE_MEDIA_GROUP}|{self.CAROUSEL_VIDEO_MEDIA_GROUP}"
         self.MEDIA_CONTAINER = f"{self.ZOOMABLE_VIEW_CONTAINER}|{self.CAROUSEL_MEDIA_GROUP}|{self.SPONSORED_CONTENT_SERVER_RENDERED_ROOT}|{self.COLLECTION_ROOT_VIEW}|{self.MEDIA_CONTENT_LOCATION}"
-        self.GAP_VIEW_AND_FOOTER_SPACE = f"{self.GAP_VIEW}|{self.FOOTER_SPACE}"
+        self.GAP_VIEW_AND_FOOTER_SPACE = f"{self.GAP_VIEW}|{self.FOOTER_SPACE}|{APP_ID}:id/feed_end_spacer|{APP_ID}:id/end_of_feed_spacer|{APP_ID}:id/feed_spacer"
         self.BLOCK_POPUP = f"{self.DIALOG_CONTAINER}|{self.DIALOG_ROOT_VIEW}"
 
         self.ROW_FEED_TEXT = (
             f"{self.ROW_FEED_HEADLINE}|{self.ROW_FEED_COMMENT_TEXTVIEW_LAYOUT}"
         )
-        self.USER_LIST_CONTAINER = f"{self.FOLLOW_LIST_CONTAINER}|{self.ROW_USER_CONTAINER_BASE}|{self.RECOMMENDED_USER_ROW_CONTENT_IDENTIFIER}"
+        # Updated for Instagram v330+ likers UI
+        self.USER_LIST_CONTAINER = f"{self.FOLLOW_LIST_CONTAINER}|{self.ROW_USER_CONTAINER_BASE}|{self.RECOMMENDED_USER_ROW_CONTENT_IDENTIFIER}|{self.ROW_USER_CONTAINER}|{self.USER_ROW_CONTAINER}|{self.LIKERS_LIST_CONTAINER}|android:id/list|androidx.recyclerview.widget.RecyclerView"
         self.SEARCH_ROW_ITEM = f"{self.ROW_SEARCH_USER_USERNAME}|{self.ROW_HASHTAG_TEXTVIEW_TAG_NAME}|{self.ROW_PLACE_TITLE}"
 
         # android specific

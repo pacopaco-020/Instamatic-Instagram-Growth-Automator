@@ -56,8 +56,9 @@ class InteractBloggerPostLikers(Plugin):
         self.profile_filter = profile_filter
         self.configs = configs  # Add this
 
+        # Don't create on_interaction here - we'll create it dynamically for each blogger
         (
-            on_interaction,
+            _,
             stories_percentage,
             likes_percentage,
             follow_percentage,
@@ -65,7 +66,7 @@ class InteractBloggerPostLikers(Plugin):
             pm_percentage,
             interact_percentage,
         ) = init_on_things(
-            None,  # Change to None instead of blogger
+            "temp",  # Temporary source, we'll override this
             self.args, self.sessions, self.session_state
         )
 
@@ -108,7 +109,7 @@ class InteractBloggerPostLikers(Plugin):
                 self.args.blogger_post_likers,
                 self.current_mode,
                 storage,
-                on_interaction,
+                None,  # on_interaction will be created dynamically
                 interaction,
                 partial(is_follow_limit_reached_for_source, self.session_state, None, None),
             )
@@ -121,7 +122,7 @@ class InteractBloggerPostLikers(Plugin):
         parameter_passed,
         current_job,
         storage,
-        on_interaction,
+        on_interaction,  # This will be None, we create it dynamically
         interaction,
         is_follow_limit_reached,
     ):
@@ -137,6 +138,22 @@ class InteractBloggerPostLikers(Plugin):
         )
 
         for blogger in bloggers:
+            # Create dynamic on_interaction callback for this specific blogger
+            from Instamatic.core.interaction import _on_interaction
+            from functools import partial
+            
+            on_interaction = partial(
+                _on_interaction,
+                blogger,  # source as first positional argument
+                interactions_limit=get_value(
+                    self.args.interactions_count, "Interactions count: {}", 70
+                ),
+                likes_limit=self.args.current_likes_limit,
+                sessions=self.sessions,
+                session_state=self.session_state,
+                args=self.args,
+            )
+            
             # Handle the blogger
             result = handle_likers(
                 self,

@@ -1,20 +1,36 @@
-# Instagram Version Finder Requirements
-# Python dependencies for the Instagram APK analysis toolkit
+# Instamatic Bot Requirements
+# Python dependencies for the Instagram automation bot
 
-# Core dependencies (usually included with Python 3.7+)
-# No external dependencies required - uses only standard library
+# Core dependencies
+colorama>=0.4.6
+uiautomator2>=3.4.1
+adbutils>=2.9.4
+pillow>=11.3.0
+requests>=2.32.5
 
-# Optional dependencies for enhanced functionality
-# Uncomment if you want additional features:
+# Configuration and data handling
+configargparse>=1.7.1
+pyyaml>=6.0.2
+ruamel.yaml>=0.18.15
 
-# For better XML parsing (if apktool extraction needs it)
-# lxml>=4.6.0
+# Text processing and utilities
+emoji>=2.14.1
+langdetect>=1.0.9
+spintax>=1.0.4
+atomicwrites>=1.4.1
 
-# For progress bars during long operations
-# tqdm>=4.60.0
+# XML processing
+lxml>=6.0.1
 
-# For better error handling and logging
-# colorama>=0.4.4
+# HTTP and networking
+urllib3>=2.5.0
+certifi>=2025.8.3
+charset-normalizer>=3.4.3
+idna>=3.10
 
-# For parallel processing optimization
-# psutil>=5.8.0
+# Utilities
+decorator>=5.2.1
+deprecation>=2.1.0
+packaging>=25.0
+retry2>=0.9.5
+six>=1.17.0

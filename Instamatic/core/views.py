@@ -563,30 +563,60 @@ class PostsViewList:
             logger.info(
                 "Scroll down to see next post.", extra={"color": f"{Fore.GREEN}"}
             )
+            # Try the traditional method first
             gap_view_obj = self.device.find(index=-1, resourceIdMatches=containers_gap)
             obj1 = None
+            gap_found = False
+            
             for _ in range(3):
                 if not gap_view_obj.exists():
                     logger.debug("Can't find the gap obj, scroll down a little more.")
                     PostsViewList(self.device).swipe_to_fit_posts(SwipeTo.HALF_PHOTO)
                     gap_view_obj = self.device.find(resourceIdMatches=containers_gap)
                     if not gap_view_obj.exists():
-                        continue
+                        # For Instagram v330+, try alternative approach when gap elements don't exist
+                        logger.debug("Gap elements not found, using alternative scrolling method for v330+")
+                        self._scroll_to_next_post_v330()
+                        return True
                     else:
+                        gap_found = True
                         break
                 else:
+                    gap_found = True
+                    break
+            
+            if not gap_found:
+                # Fallback to v330+ method
+                self._scroll_to_next_post_v330()
+                return True
+                
+            # Continue with traditional method if gap was found
+            for _ in range(3):
+                try:
                     media = self.device.find(resourceIdMatches=containers_content)
-                    if (
-                        gap_view_obj.get_bounds()["bottom"]
-                        < media.get_bounds()["bottom"]
-                    ):
-                        PostsViewList(self.device).swipe_to_fit_posts(
-                            SwipeTo.HALF_PHOTO
-                        )
-                        continue
-                    suggested = self.device.find(resourceIdMatches=suggested_users)
-                    if suggested.exists():
-                        for _ in range(2):
+                    if media.exists():
+                        if gap_view_obj.exists():
+                            gap_bounds = gap_view_obj.get_bounds()
+                            media_bounds = media.get_bounds()
+                            if (
+                                gap_bounds["bottom"]
+                                < media_bounds["bottom"]
+                            ):
+                                PostsViewList(self.device).swipe_to_fit_posts(
+                                    SwipeTo.HALF_PHOTO
+                                )
+                                continue
+                        else:
+                            logger.debug("Gap view object no longer exists during bounds comparison, using alternative scrolling")
+                            self._scroll_to_next_post_v330()
+                            return True
+                except Exception as e:
+                    logger.debug(f"Error comparing bounds: {e}, using alternative scrolling")
+                    self._scroll_to_next_post_v330()
+                    return True
+                suggested = self.device.find(resourceIdMatches=suggested_users)
+                if suggested.exists():
+                    for _ in range(2):
                             PostsViewList(self.device).swipe_to_fit_posts(
                                 SwipeTo.HALF_PHOTO
                             )
@@ -598,17 +628,32 @@ class PostsViewList:
                                 break
                     break
             if obj1 is None:
-                obj1 = gap_view_obj.get_bounds()["bottom"]
+                if gap_view_obj.exists():
+                    try:
+                        obj1 = gap_view_obj.get_bounds()["bottom"]
+                    except Exception as e:
+                        logger.debug(f"Failed to get gap_view_obj bounds: {e}, using alternative scrolling")
+                        self._scroll_to_next_post_v330()
+                        return True
+                else:
+                    logger.debug("Gap view object no longer exists, using alternative scrolling")
+                    self._scroll_to_next_post_v330()
+                    return True
             containers_content = self.device.find(resourceIdMatches=containers_content)
 
-            obj2 = (
-                (
-                    containers_content.get_bounds()["bottom"]
-                    + containers_content.get_bounds()["top"]
+            try:
+                obj2 = (
+                    (
+                        containers_content.get_bounds()["bottom"]
+                        + containers_content.get_bounds()["top"]
+                    )
+                    * 1
+                    / 3
                 )
-                * 1
-                / 3
-            )
+            except Exception as e:
+                logger.debug(f"Failed to get containers_content bounds: {e}, using alternative scrolling")
+                self._scroll_to_next_post_v330()
+                return True
 
             self.device.swipe_points(
                 displayWidth / 2,
@@ -617,6 +662,42 @@ class PostsViewList:
                 obj2 + 5,
             )
             return True
+
+    def _scroll_to_next_post_v330(self):
+        """Alternative scrolling method for Instagram v330+ when gap elements don't exist"""
+        logger.debug("Using Instagram v330+ compatible scrolling method")
+        displayWidth = self.device.get_info()["displayWidth"]
+        displayHeight = self.device.get_info()["displayHeight"]
+        
+        # Try to find any media container to determine scroll position
+        media_container = self.device.find(resourceIdMatches=ResourceID.MEDIA_CONTAINER)
+        if media_container.exists():
+            try:
+                media_bounds = media_container.get_bounds()
+                # Scroll from the bottom of the current media to show next post
+                self.device.swipe_points(
+                    displayWidth / 2,
+                    media_bounds["bottom"] - 50,
+                    displayWidth / 2,
+                    media_bounds["top"] + 100,
+                )
+            except Exception as e:
+                logger.debug(f"Error with media-based scrolling: {e}, using fallback")
+                # Fallback to simple screen-based scrolling
+                self.device.swipe_points(
+                    displayWidth / 2,
+                    displayHeight * 0.7,
+                    displayWidth / 2,
+                    displayHeight * 0.3,
+                )
+        else:
+            # Fallback to simple screen-based scrolling
+            self.device.swipe_points(
+                displayWidth / 2,
+                displayHeight * 0.7,
+                displayWidth / 2,
+                displayHeight * 0.3,
+            )
 
     def _find_likers_container(self):
         universal_actions = UniversalActions(self.device)
@@ -646,14 +727,28 @@ class PostsViewList:
                 universal_actions._swipe_points(Direction.DOWN, delta_y=100)
                 continue
             if not likes_view.exists():
-                if description_view.exists() or gap_view_obj.exists():
+                try:
+                    gap_exists = gap_view_obj.exists()
+                except Exception as e:
+                    logger.debug(f"Error checking gap_view_obj: {e}, assuming it doesn't exist")
+                    gap_exists = False
+                
+                if description_view.exists() or gap_exists:
                     return False, likes
                 else:
                     universal_actions._swipe_points(Direction.DOWN, delta_y=100)
                     continue
-            elif media.get_bounds()["bottom"] > likes_view.get_bounds()["bottom"]:
-                universal_actions._swipe_points(Direction.DOWN, delta_y=100)
-                continue
+            else:
+                try:
+                    media_bottom = media.get_bounds()["bottom"]
+                    likes_bottom = likes_view.get_bounds()["bottom"]
+                    if media_bottom > likes_bottom:
+                        universal_actions._swipe_points(Direction.DOWN, delta_y=100)
+                        continue
+                except Exception as e:
+                    logger.debug(f"Error comparing media and likes bounds: {e}, using alternative scrolling")
+                    universal_actions._swipe_points(Direction.DOWN, delta_y=100)
+                    continue
             logger.debug("Likers container exists!")
             likes = self._get_number_of_likers(likes_view)
             return likes_view.exists(), likes
@@ -805,13 +900,18 @@ class PostsViewList:
                 feed_composer = self.device.find(
                     resourceId=ResourceID.FEED_INLINE_COMPOSER_BUTTON_TEXTVIEW
                 )
-                if gap_view_obj.exists() and gap_view_obj.get_bounds()["bottom"] < (
-                    self.device.get_info()["displayHeight"] / 3
-                ):
-                    universal_actions._swipe_points(
-                        direction=Direction.DOWN, delta_y=200
-                    )
-                    continue
+                if gap_view_obj.exists():
+                    try:
+                        if gap_view_obj.get_bounds()["bottom"] < (
+                            self.device.get_info()["displayHeight"] / 3
+                        ):
+                            universal_actions._swipe_points(
+                                direction=Direction.DOWN, delta_y=200
+                            )
+                            continue
+                    except Exception as e:
+                        logger.debug(f"Failed to get gap_view_obj bounds in post comparison: {e}")
+                        return False, new_description, username, is_ad, is_hashtag, has_tags
                 row_feed_profile_header = self.device.find(
                     resourceId=ResourceID.ROW_FEED_PROFILE_HEADER
                 )
@@ -1753,15 +1853,56 @@ class OpenedPostView:
         return None
 
     def _getUserContainer(self):
+        # Try multiple approaches to find likers list
+        # Method 1: Try updated resource IDs
         obj = self.device.find(
             resourceIdMatches=ResourceID.USER_LIST_CONTAINER,
         )
-        return obj if obj.exists(Timeout.LONG) else None
+        if obj.exists(Timeout.SHORT):
+            return obj
+        
+        # Method 2: Try RecyclerView (common in v330+)
+        obj = self.device.find(className="androidx.recyclerview.widget.RecyclerView")
+        if obj.exists(Timeout.SHORT):
+            return obj
+            
+        # Method 3: Try android:id/list
+        obj = self.device.find(resourceId="android:id/list")
+        if obj.exists(Timeout.SHORT):
+            return obj
+            
+        # Method 4: Try any container with user-related content
+        obj = self.device.find(
+            resourceIdMatches=".*user.*|.*liker.*|.*follow.*",
+            className="android.widget.LinearLayout|android.widget.FrameLayout|android.widget.RelativeLayout"
+        )
+        if obj.exists(Timeout.SHORT):
+            return obj
+            
+        return None
 
     def _getUserName(self, container):
-        return container.child(
+        # Try multiple approaches to find username
+        # Method 1: Try primary resource ID
+        username_view = container.child(
             resourceId=ResourceID.ROW_USER_PRIMARY_NAME,
         )
+        if username_view.exists(Timeout.SHORT):
+            return username_view
+            
+        # Method 2: Try alternative resource IDs
+        username_view = container.child(
+            resourceIdMatches=f"{ResourceID.ROW_USER_TEXTVIEW}|{ResourceID.USERNAME_TEXTVIEW}|.*username.*|.*user.*name.*"
+        )
+        if username_view.exists(Timeout.SHORT):
+            return username_view
+            
+        # Method 3: Try any TextView in the container
+        username_view = container.child(className="android.widget.TextView")
+        if username_view.exists(Timeout.SHORT):
+            return username_view
+            
+        return username_view
 
     def _isFollowing(self, container):
         text = container.child(

@@ -338,7 +338,7 @@ def handle_likers(
 
         likes_list_view = OpenedPostView(device)._getListViewLikers()
         if likes_list_view is None:
-            return
+            logger.warning("Likes list view not found, but continuing with user container detection...")
         prev_screen_iterated_likers = []
 
         while True:
@@ -347,7 +347,8 @@ def handle_likers(
             opened = False
             user_container = OpenedPostView(device)._getUserContainer()
             if user_container is None:
-                logger.warning("Likers list didn't load :(")
+                logger.warning(f"Likers list didn't load for {target} :(")
+                logger.info(f"Completed handling blogger '{target}'")
                 return
             row_height, n_users = inspect_current_view(user_container)
             try:
