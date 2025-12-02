@@ -29,6 +29,7 @@ from Instamatic.core.utils import (
     close_instagram,
     config_examples,
     countdown,
+    dismiss_update_notification,
     get_instagram_version,
     get_value,
     head_up_notifications,
@@ -152,6 +153,10 @@ def start_bot(**kwargs):
                 device.wake_up()
             except Exception as e:
                 logger.warning(f"Wake-up failed: {str(e)}, continuing anyway...")
+            
+            # Check for and dismiss update notification before starting
+            dismiss_update_notification(device)
+            
             head_up_notifications(enabled=False)
             logger.info(
                 "-------- START: "

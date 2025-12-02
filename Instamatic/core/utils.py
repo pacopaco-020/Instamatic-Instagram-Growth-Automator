@@ -329,6 +329,110 @@ def check_if_crash_popup_is_there(device) -> bool:
     return False
 
 
+def dismiss_update_notification(device) -> bool:
+    """
+    Check for and dismiss system update notification that appears as a bottom drawer.
+    Looks for close/dismiss buttons in the top right area and update-related text.
+    Returns True if notification was found and dismissed, False otherwise.
+    """
+    logger.debug("Checking for update notification...")
+    
+    try:
+        # Import required modules
+        from Instamatic.core.device_facade import Timeout
+        from Instamatic.core.views import case_insensitive_re
+        
+        # Get device info to calculate screen dimensions
+        device_info = device.get_info()
+        screen_width = device_info.get('displayWidth', 1080)
+        screen_height = device_info.get('displayHeight', 1920)
+        
+        # Common close button patterns for Android system notifications
+        # Try multiple approaches to find the close button
+        close_patterns = [
+            # Look for ImageButton with close/dismiss description
+            {"className": "android.widget.ImageButton", "descriptionMatches": case_insensitive_re("close|dismiss")},
+            # Look for ImageView with close icon
+            {"className": "android.widget.ImageView", "descriptionMatches": case_insensitive_re("close|dismiss")},
+            # Look for Button with close text
+            {"className": "android.widget.Button", "textMatches": case_insensitive_re("close|dismiss")},
+            # Look for TextView with close text
+            {"className": "android.widget.TextView", "textMatches": case_insensitive_re("close|dismiss")},
+        ]
+        
+        # Try to find and click close button using various methods
+        for pattern in close_patterns:
+            try:
+                obj = device.find(**pattern)
+                if obj.exists(Timeout.TINY):
+                    bounds = obj.get_bounds()
+                    # Check if button is in the top-right area (right 20% of screen, top 30%)
+                    if bounds["right"] > screen_width * 0.8 and bounds["top"] < screen_height * 0.3:
+                        logger.info("Found update notification close button, clicking it...")
+                        obj.click()
+                        sleep(1)  # Wait for notification to dismiss
+                        return True
+            except Exception as e:
+                logger.debug(f"Close button pattern failed: {str(e)}")
+                continue
+        
+        # Fallback: Look for update-related text and try clicking top-right area
+        update_keywords = ["update", "upgrade", "system", "software", "new version"]
+        for keyword in update_keywords:
+            try:
+                # Look for text containing update keywords
+                update_text = device.find(
+                    className="android.widget.TextView",
+                    textMatches=case_insensitive_re(keyword)
+                )
+                if update_text.exists(Timeout.TINY):
+                    logger.info(f"Found update notification with keyword '{keyword}', attempting to dismiss...")
+                    # Click in the top-right corner (90% width, 10% height) to hit close button
+                    close_x = int(screen_width * 0.9)
+                    close_y = int(screen_height * 0.1)
+                    device.deviceV2.click(close_x, close_y)
+                    sleep(1)
+                    # Verify it was dismissed by checking if text still exists
+                    if not update_text.exists(Timeout.TINY):
+                        logger.info("Update notification dismissed successfully")
+                        return True
+            except Exception as e:
+                logger.debug(f"Update keyword '{keyword}' check failed: {str(e)}")
+                continue
+        
+        # Final fallback: If we detect a bottom sheet/drawer, try clicking top-right corner
+        # This is a last resort for when we can't identify the close button
+        try:
+            # Look for common bottom sheet containers - try multiple class names
+            bottom_sheet_classes = [
+                "android.widget.FrameLayout",
+                "androidx.coordinatorlayout.widget.CoordinatorLayout",
+            ]
+            for sheet_class in bottom_sheet_classes:
+                bottom_sheet = device.find(className=sheet_class)
+                if bottom_sheet.exists(Timeout.TINY):
+                    # Check if there's a visible bottom sheet by looking at bounds
+                    # Bottom sheets typically occupy bottom 30-50% of screen
+                    bounds = bottom_sheet.get_bounds()
+                    if bounds["top"] > screen_height * 0.5 and bounds["bottom"] > screen_height * 0.7:
+                        logger.info("Detected potential bottom sheet, trying to dismiss...")
+                        # Click top-right of the bottom sheet (95% right, 10% from top of sheet)
+                        close_x = int(bounds["right"] * 0.95)
+                        close_y = int(bounds["top"] + (bounds["bottom"] - bounds["top"]) * 0.1)
+                        device.deviceV2.click(close_x, close_y)
+                        sleep(1)
+                        return True
+        except Exception as e:
+            logger.debug(f"Bottom sheet detection failed: {str(e)}")
+        
+        logger.debug("No update notification found")
+        return False
+        
+    except Exception as e:
+        logger.warning(f"Error checking for update notification: {str(e)}")
+        return False
+
+
 def show_ending_conditions():
     end_likes = configs.args.end_if_likes_limit_reached
     end_follows = configs.args.end_if_follows_limit_reached

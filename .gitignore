@@ -7,6 +7,7 @@ auto_run_3.sh
 auto_run_4.sh
 auto_run_5.sh
 auto_run_managed.sh
+accounts
 
 # Virtual environments
 .venv39/
