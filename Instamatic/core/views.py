@@ -186,10 +186,19 @@ class TabBarView:
 
         if button is not None and button.exists(Timeout.MEDIUM):
             # Two clicks to reset tab content
-            button.click(sleep=SleepTime.SHORT)
-            if tab is not TabBarTabs.PROFILE:
+            try:
                 button.click(sleep=SleepTime.SHORT)
-            return
+                if tab is not TabBarTabs.PROFILE:
+                    button.click(sleep=SleepTime.SHORT)
+                return
+            except Exception as e:
+                if "UiObjectNotFoundException" in str(e) or "JsonRpcError" in str(e):
+                    logger.debug(f"Tab button disappeared during click: {str(e)}")
+                    # Try to find it again or use alternative navigation
+                    logger.warning(f"Could not click {tab_name} tab, element disappeared")
+                    return
+                else:
+                    raise
 
         logger.error(f"Didn't find tab {tab_name} in the tab bar...")
 
@@ -545,20 +554,33 @@ class PostsViewList:
 
         # move type: half photo
         if swipe == SwipeTo.HALF_PHOTO:
-            zoomable_view_container = self.device.find(
-                resourceIdMatches=containers_content
-            ).get_bounds()["bottom"]
-            ac_exists, _, ac_bottom = PostsViewList(
-                self.device
-            )._get_action_bar_position()
-            if ac_exists and zoomable_view_container < ac_bottom:
-                zoomable_view_container += ac_bottom
-            self.device.swipe_points(
-                displayWidth / 2,
-                zoomable_view_container - 5,
-                displayWidth / 2,
-                zoomable_view_container * 0.5,
-            )
+            try:
+                zoomable_view = self.device.find(
+                    resourceIdMatches=containers_content
+                )
+                if not zoomable_view.exists():
+                    logger.debug("Media container not found, using alternative swipe method")
+                    self._scroll_to_next_post_v330()
+                    return True
+                zoomable_view_container = zoomable_view.get_bounds()["bottom"]
+                ac_exists, _, ac_bottom = PostsViewList(
+                    self.device
+                )._get_action_bar_position()
+                if ac_exists and zoomable_view_container < ac_bottom:
+                    zoomable_view_container += ac_bottom
+                self.device.swipe_points(
+                    displayWidth / 2,
+                    zoomable_view_container - 5,
+                    displayWidth / 2,
+                    zoomable_view_container * 0.5,
+                )
+            except Exception as e:
+                if "UiObjectNotFoundException" in str(e) or "JsonRpcError" in str(e):
+                    logger.debug(f"Media container not available: {str(e)}, using alternative swipe method")
+                    self._scroll_to_next_post_v330()
+                    return True
+                else:
+                    raise
         elif swipe == SwipeTo.NEXT_POST:
             logger.info(
                 "Scroll down to see next post.", extra={"color": f"{Fore.GREEN}"}

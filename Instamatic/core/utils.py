@@ -363,166 +363,23 @@ def dismiss_update_notification_adb(device_id: Optional[str] = None) -> bool:
                 screen_height = int(match.group(2))
                 logger.debug(f"Detected screen size: {screen_width}x{screen_height}")
         
-        # Dump UI hierarchy to find the notification
-        logger.debug("Dumping UI hierarchy to find update notification...")
-        dump_result = subprocess.run(
-            f"{adb_cmd} shell uiautomator dump /sdcard/window_dump.xml",
-            stdout=PIPE,
-            stderr=PIPE,
-            shell=True,
-            encoding="utf8"
-        )
+        # IMPORTANT: We're calling this BEFORE UIAutomator initialization
+        # So we MUST use coordinate-based approach that doesn't require UIAutomator
+        # Trying uiautomator dump here could interfere with ATX Agent startup
+        logger.debug("Using coordinate-based approach (UIAutomator not initialized yet)...")
         
-        if dump_result.returncode != 0:
-            logger.debug("Failed to dump UI hierarchy")
-            return False
-        
-        # Read the dump file
-        xml_result = subprocess.run(
-            f"{adb_cmd} shell cat /sdcard/window_dump.xml",
-            stdout=PIPE,
-            stderr=PIPE,
-            shell=True,
-            encoding="utf8"
-        )
-        
-        if xml_result.returncode != 0 or not xml_result.stdout:
-            logger.debug("Failed to read UI dump")
-            return False
-        
-        xml_content = xml_result.stdout
-        
-        # Look for update notification indicators
-        update_indicators = [
-            "update available",
-            "update",
-            "instagram",
-            "google play",
-            "new version",
-            "upgrade"
-        ]
-        
-        found_notification = False
-        for indicator in update_indicators:
-            if indicator.lower() in xml_content.lower():
-                logger.info(f"Found update notification indicator: '{indicator}'")
-                found_notification = True
-                break
-        
-        if not found_notification:
-            logger.debug("No update notification found in UI dump")
-            return False
-        
-        # Try to find close button by parsing XML or use coordinate-based approach
-        # Google Play update notifications typically have the X button at:
-        # - Top-right of bottom drawer (around 90-95% width, 10-15% from top of drawer)
-        # - Bottom drawer usually starts around 60-70% down the screen
-        
-        # Strategy 1: Look for the specific "Dismiss update dialog" button in XML
-        import re
-        # Google Play uses content-desc="Dismiss update dialog" for the X button
-        # Look for the node with this content-desc and extract its bounds
-        dismiss_pattern = r'content-desc="Dismiss update dialog"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"'
-        dismiss_match = re.search(dismiss_pattern, xml_content, re.IGNORECASE)
-        
-        if dismiss_match:
-            left = int(dismiss_match.group(1))
-            top = int(dismiss_match.group(2))
-            right = int(dismiss_match.group(3))
-            bottom = int(dismiss_match.group(4))
-            
-            # Click center of the dismiss button
-            click_x = (left + right) // 2
-            click_y = (top + bottom) // 2
-            logger.info(f"Found 'Dismiss update dialog' button at bounds [{left},{top}][{right},{bottom}], clicking center ({click_x}, {click_y})...")
-            tap_result = subprocess.run(
-                f"{adb_cmd} shell input tap {click_x} {click_y}",
-                stdout=PIPE,
-                stderr=PIPE,
-                shell=True,
-                encoding="utf8"
-            )
-            if tap_result.returncode == 0:
-                sleep(1)
-                # Verify it was dismissed
-                verify_dump = subprocess.run(
-                    f"{adb_cmd} shell uiautomator dump /sdcard/window_dump.xml",
-                    stdout=PIPE,
-                    stderr=PIPE,
-                    shell=True,
-                    encoding="utf8"
-                )
-                if verify_dump.returncode == 0:
-                    verify_xml = subprocess.run(
-                        f"{adb_cmd} shell cat /sdcard/window_dump.xml",
-                        stdout=PIPE,
-                        stderr=PIPE,
-                        shell=True,
-                        encoding="utf8"
-                    )
-                    if verify_xml.returncode == 0 and "Dismiss update dialog" not in verify_xml.stdout:
-                        logger.info("Update notification dismissed successfully!")
-                        return True
-                    elif verify_xml.returncode == 0:
-                        logger.debug("Button clicked but notification still present, trying again...")
-                        # Try clicking again with slight offset
-                        subprocess.run(
-                            f"{adb_cmd} shell input tap {click_x} {click_y}",
-                            stdout=PIPE,
-                            stderr=PIPE,
-                            shell=True,
-                            encoding="utf8"
-                        )
-                        sleep(1)
-                        return True
-                return True
-        
-        # Strategy 2: Look for any dismiss/close button in the XML
-        close_patterns = [
-            r'content-desc="[^"]*dismiss[^"]*"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"',
-            r'content-desc="[^"]*close[^"]*"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"',
-        ]
-        
-        for pattern in close_patterns:
-            matches = re.finditer(pattern, xml_content, re.IGNORECASE)
-            for match in matches:
-                left = int(match.group(1))
-                top = int(match.group(2))
-                right = int(match.group(3))
-                bottom = int(match.group(4))
-                
-                # Check if it's in the top-right area of the drawer (right side, in bottom half of screen)
-                if right > screen_width * 0.85 and top > screen_height * 0.4:
-                    # Click center of the button
-                    click_x = (left + right) // 2
-                    click_y = (top + bottom) // 2
-                    logger.info(f"Found close/dismiss button at ({click_x}, {click_y}), clicking...")
-                    subprocess.run(
-                        f"{adb_cmd} shell input tap {click_x} {click_y}",
-                        stdout=PIPE,
-                        stderr=PIPE,
-                        shell=True,
-                        encoding="utf8"
-                    )
-                    sleep(1)
-                    return True
-        
-        # Strategy 3: Coordinate-based fallback (based on actual UI dump analysis)
-        # From UI dump: X button is at bounds [931,1076][1080,1225] on 1080x2220 screen
+        # Use coordinate-based approach directly - this works without UIAutomator
+        # Based on actual UI dump analysis: X button at bounds [931,1076][1080,1225] on 1080x2220 screen
         # Center coordinates: (1006, 1151) for base screen size
-        logger.info("Using coordinate-based fallback to dismiss notification...")
-        
-        # Base coordinates from actual measurement
         base_width = 1080
         base_height = 2220
         base_x = 1006  # Center X of dismiss button
         base_y = 1151  # Center Y of dismiss button
         
-        # Scale coordinates for current screen size
         close_x = int((base_x / base_width) * screen_width)
         close_y = int((base_y / base_height) * screen_height)
         
-        logger.info(f"Attempting to click dismiss button at calculated coordinates ({close_x}, {close_y})...")
+        logger.info(f"Attempting to click dismiss button at coordinates ({close_x}, {close_y})...")
         tap_result = subprocess.run(
             f"{adb_cmd} shell input tap {close_x} {close_y}",
             stdout=PIPE,
@@ -533,45 +390,24 @@ def dismiss_update_notification_adb(device_id: Optional[str] = None) -> bool:
         
         if tap_result.returncode == 0:
             sleep(1)
-            # Verify notification was dismissed
-            verify_dump = subprocess.run(
-                f"{adb_cmd} shell uiautomator dump /sdcard/window_dump.xml",
-                stdout=PIPE,
-                stderr=PIPE,
-                shell=True,
-                encoding="utf8"
-            )
-            if verify_dump.returncode == 0:
-                verify_xml = subprocess.run(
-                    f"{adb_cmd} shell cat /sdcard/window_dump.xml",
+            # Try a few nearby coordinates in case of slight variation
+            offsets = [(0, -20), (0, 20), (-10, 0), (10, 0)]
+            for offset_x, offset_y in offsets:
+                try_x = close_x + offset_x
+                try_y = close_y + offset_y
+                logger.debug(f"Trying offset coordinate ({try_x}, {try_y})...")
+                subprocess.run(
+                    f"{adb_cmd} shell input tap {try_x} {try_y}",
                     stdout=PIPE,
                     stderr=PIPE,
                     shell=True,
                     encoding="utf8"
                 )
-                if verify_xml.returncode == 0:
-                    # Check if "Dismiss update dialog" or "Update available" is still present
-                    if "Dismiss update dialog" not in verify_xml.stdout and "Update available" not in verify_xml.stdout:
-                        logger.info("Update notification dismissed successfully via coordinates")
-                        return True
-                    else:
-                        # Try a few nearby coordinates in case of slight variation
-                        offsets = [(0, -20), (0, 20), (-10, 0), (10, 0)]
-                        for offset_x, offset_y in offsets:
-                            try_x = close_x + offset_x
-                            try_y = close_y + offset_y
-                            logger.debug(f"Trying offset coordinate ({try_x}, {try_y})...")
-                            subprocess.run(
-                                f"{adb_cmd} shell input tap {try_x} {try_y}",
-                                stdout=PIPE,
-                                stderr=PIPE,
-                                shell=True,
-                                encoding="utf8"
-                            )
-                            sleep(0.5)
-                        return True
+                sleep(0.3)
+            logger.info("Update notification dismissal attempted (coordinate-based, no verification possible without UIAutomator)")
+            return True
         
-        logger.debug("Could not dismiss update notification")
+        logger.debug("Could not dismiss update notification via coordinates")
         return False
         
     except Exception as e:

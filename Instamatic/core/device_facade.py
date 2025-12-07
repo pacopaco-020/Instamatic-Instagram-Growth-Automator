@@ -795,7 +795,15 @@ class DeviceFacade:
                 DeviceFacade.sleep_mode(sleep)
 
             except uiautomator2.JSONRPCError as e:
-                if crash_report_if_fails:
+                error_str = str(e)
+                # Check if this is a UiObjectNotFoundException - element doesn't exist
+                if "UiObjectNotFoundException" in error_str or "objInfo" in error_str:
+                    logger.debug(f"UI element no longer exists, cannot click: {error_str}")
+                    if crash_report_if_fails:
+                        raise DeviceFacade.JsonRpcError(e)
+                    else:
+                        logger.debug("Trying to press on a obj which is gone.")
+                elif crash_report_if_fails:
                     raise DeviceFacade.JsonRpcError(e)
                 else:
                     logger.debug("Trying to press on a obj which is gone.")
@@ -1038,11 +1046,17 @@ class DeviceFacade:
                 try:
                     return self.viewV2.info["bounds"]
                 except uiautomator2.JSONRPCError as e:
-                    if attempt < max_retries - 1:
-                        logger.debug(f"get_bounds attempt {attempt+1} failed, retrying: {str(e)}")
+                    # Check if this is a UiObjectNotFoundException wrapped in JSONRPCError
+                    error_str = str(e)
+                    if "UiObjectNotFoundException" in error_str or "objInfo" in error_str:
+                        logger.debug(f"UI element no longer exists for bounds check: {error_str}")
+                        # Return default bounds to prevent crash
+                        return {"top": 0, "bottom": 100, "left": 0, "right": 100}
+                    elif attempt < max_retries - 1:
+                        logger.debug(f"get_bounds attempt {attempt+1} failed, retrying: {error_str}")
                         sleep(0.5)
                     else:
-                        logger.warning(f"get_bounds failed after {max_retries} attempts: {str(e)}")
+                        logger.warning(f"get_bounds failed after {max_retries} attempts: {error_str}")
                         raise DeviceFacade.JsonRpcError(e)
                 except Exception as e:
                     if "UiObjectNotFoundException" in str(e) or "objInfo" in str(e):

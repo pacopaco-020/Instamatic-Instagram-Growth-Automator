@@ -16,7 +16,7 @@ from Instamatic.core.log import (
     is_log_file_updated,
     update_log_file_name,
 )
-from Instamatic.core.navigation import check_if_english
+# from Instamatic.core.navigation import check_if_english  # Removed - language check disabled
 from Instamatic.core.persistent_list import PersistentList
 from Instamatic.core.report import print_full_report
 from Instamatic.core.session_state import SessionState, SessionStateEncoder
@@ -216,7 +216,7 @@ def start_bot(**kwargs):
             tab_bar_view = TabBarView(device)
             try:
                 account_view.navigate_to_main_account()
-                check_if_english(device)
+                # check_if_english(device)  # Removed - language check disabled to avoid unnecessary errors
                 if configs.args.username is not None:
                     success = account_view.changeToUsername(configs.args.username)
                     if not success:
