@@ -20,4 +20,4 @@ ruamel.yaml.clib==0.2.12
 six==1.17.0
 spintax==1.0.4
 uiautomator2==3.4.1
-urllib3==2.5.0
+urllib3==2.6.0
